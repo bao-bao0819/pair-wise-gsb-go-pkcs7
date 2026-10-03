@@ -127,5 +127,34 @@ func SignAndDetach(content []byte, cert *x509.Certificate, privkey *rsa.PrivateK
 
 
 
+## Detailed multi-signer verification
+
+`VerifyWithReport` verifies every `SignerInfo` independently instead of
+returning at the first error. Each report covers certificate resolution
+(missing certificate and ambiguous same-issuer/same-serial candidates are
+distinct failures), the message-digest attribute, the cryptographic signature
+(unsupported algorithms are reported separately from signature mismatches),
+and the certificate trust chain. Verification of the remaining signers always
+continues, so a single bad `SignerInfo` never discards genuine evidence about
+the others.
+
+```go
+report, err := p7.VerifyWithReport(pkcs7.VerifyReportOptions{
+    Policy:        pkcs7.PolicyAtLeastKDistinct,
+    K:             2,
+    IdentityBasis: pkcs7.IdentityCertificateFingerprint,
+    Roots:         truststore,
+    CurrentTime:   verificationTime,
+})
+```
+
+The overall decision is made by an explicit policy: `PolicyAll`, `PolicyAny`,
+or `PolicyAtLeastKDistinct`. For the threshold policy, identities are
+deduplicated by either the caller-selected SHA-256 certificate fingerprint or
+the public key fingerprint, so repeated `SignerInfo`s or renewed certificates
+with the same key cannot inflate the count. `CurrentTime` is the sole trust
+time; the signed `signingTime` attribute is exposed in the report as an
+untrusted claim and never replaces the caller policy. The legacy
+`Verify`/`VerifyWithChain`/`VerifyWithOpts` functions are unchanged.
 ## Credits
 This is a fork of [fullsailor/pkcs7](https://github.com/fullsailor/pkcs7)
