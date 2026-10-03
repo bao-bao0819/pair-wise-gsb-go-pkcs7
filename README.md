@@ -125,6 +125,43 @@ func SignAndDetach(content []byte, cert *x509.Certificate, privkey *rsa.PrivateK
 }
 ```
 
+### Verifying detached signatures from a stream
+
+For large detached content, you do not have to load the full body into
+`p7.Content`. The detached verifier validates the CMS structure first, then
+reads the body from an `io.Reader` a single time while computing every
+signer's digest (signers that share a digest algorithm reuse one running
+hash). It never mutates `p7.Content`.
+
+```go
+p7, err := pkcs7.Parse(detachedSignatureDER)
+if err != nil {
+	log.Fatal(err)
+}
+
+f, err := os.Open("large-content.bin")
+if err != nil {
+	log.Fatal(err)
+}
+defer f.Close()
+
+// Signature is checked over the authenticated attributes, not the raw digest.
+if err := p7.VerifyDetachedWithChain(truststore, f); err != nil {
+	log.Fatal(err)
+}
+```
+
+`VerifyDetachedWithOpts` accepts a `context.Context` and a
+`MaxContentSize` limit. Supported modes are:
+
+- SignerInfos with authenticated attributes: RSA and ECDSA
+  (SHA-1/256/384/512), Ed25519, and ML-DSA-44/65/87.
+- SignerInfos without authenticated attributes: RSA and ECDSA
+  (SHA-1/256/384/512), verified from the streamed digest.
+
+Ed25519 and ML-DSA without authenticated attributes require the full message
+and return `ErrStreamingNotSupported`; DSA verification is not supported by
+this library.
 
 
 ## Credits
