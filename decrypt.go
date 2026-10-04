@@ -195,17 +195,28 @@ func selectRecipientForCertificate(recipients []asn1.RawValue, cert *x509.Certif
 		if raw.Class != 0 || raw.Tag != asn1.TagSequence {
 			continue
 		}
-		var recp recipientInfo
-		rest, err := asn1.Unmarshal(raw.FullBytes, &recp)
+		recp, err := parseKeyTransRecipientInfo(raw)
 		if err != nil {
-			return recipientInfo{}, fmt.Errorf("pkcs7: malformed KeyTransRecipientInfo: %w", err)
-		}
-		if len(rest) != 0 {
-			return recipientInfo{}, errors.New("pkcs7: trailing data in KeyTransRecipientInfo")
+			return recipientInfo{}, err
 		}
 		if isCertMatchForIssuerAndSerial(cert, recp.IssuerAndSerialNumber) {
 			return recp, nil
 		}
 	}
 	return recipientInfo{}, errors.New("pkcs7: no enveloped recipient for provided certificate")
+}
+
+func parseKeyTransRecipientInfo(raw asn1.RawValue) (recipientInfo, error) {
+	if raw.Class != 0 || raw.Tag != asn1.TagSequence {
+		return recipientInfo{}, errors.New("pkcs7: RecipientInfo is not a KeyTransRecipientInfo")
+	}
+	var recp recipientInfo
+	rest, err := asn1.Unmarshal(raw.FullBytes, &recp)
+	if err != nil {
+		return recipientInfo{}, fmt.Errorf("pkcs7: malformed KeyTransRecipientInfo: %w", err)
+	}
+	if len(rest) != 0 {
+		return recipientInfo{}, errors.New("pkcs7: trailing data in KeyTransRecipientInfo")
+	}
+	return recp, nil
 }
