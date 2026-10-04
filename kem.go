@@ -255,39 +255,62 @@ func decryptKEMRecipientKey(recipients []asn1.RawValue, cert *x509.Certificate, 
 		if !matches {
 			continue
 		}
-		if info.Version != 0 {
-			return nil, errors.New("pkcs7: KEMRecipientInfo version must be 0")
-		}
-		if !info.KEM.Algorithm.Equal(expectedKEM) {
-			return nil, errors.New("pkcs7: KEMRecipientInfo algorithm does not match private key")
-		}
-		if algorithmIdentifierHasParameters(info.KEM) {
-			return nil, errors.New("pkcs7: ML-KEM AlgorithmIdentifier parameters must be absent")
-		}
-		if !info.KDF.Algorithm.Equal(OIDKDFHKDFSHA256) || algorithmIdentifierHasParameters(info.KDF) {
-			return nil, errors.New("pkcs7: unsupported or malformed KEMRecipientInfo KDF")
-		}
-		if !info.Wrap.Algorithm.Equal(OIDKeyWrapAES256) || algorithmIdentifierHasParameters(info.Wrap) || info.KEKLength != mlKEMKEKLength {
-			return nil, errors.New("pkcs7: unsupported or malformed KEMRecipientInfo key wrap")
-		}
-
-		sharedSecret, err := decapsulate(info.Ciphertext)
-		if err != nil {
-			return nil, fmt.Errorf("pkcs7: ML-KEM decapsulation failed: %w", err)
-		}
-		kek, err := deriveKEMKey(sharedSecret, info.Wrap, info.KEKLength, info.UKM)
-		clear(sharedSecret)
-		if err != nil {
-			return nil, err
-		}
-		contentKey, err := aesKeyUnwrap(kek, info.EncryptedKey)
-		clear(kek)
-		if err != nil {
-			return nil, err
-		}
-		return contentKey, nil
+		return decryptKEMRecipientInfo(info, expectedKEM, decapsulate)
 	}
 	return nil, errors.New("pkcs7: no enveloped recipient for provided certificate")
+}
+
+// checkKEMRecipientInfo validates the KEMRecipientInfo fields that do not
+// depend on the private key.
+func checkKEMRecipientInfo(info kemRecipientInfo) error {
+	if info.Version != 0 {
+		return errors.New("pkcs7: KEMRecipientInfo version must be 0")
+	}
+	switch {
+	case info.KEM.Algorithm.Equal(OIDKeyAlgorithmMLKEM768),
+		info.KEM.Algorithm.Equal(OIDKeyAlgorithmMLKEM1024):
+	case info.KEM.Algorithm.Equal(OIDKeyAlgorithmMLKEM512):
+		return errors.New("pkcs7: ML-KEM-512 is not supported by Go 1.27 crypto/mlkem")
+	default:
+		return fmt.Errorf("pkcs7: unsupported KEM algorithm %s", info.KEM.Algorithm)
+	}
+	if algorithmIdentifierHasParameters(info.KEM) {
+		return errors.New("pkcs7: ML-KEM AlgorithmIdentifier parameters must be absent")
+	}
+	if !info.KDF.Algorithm.Equal(OIDKDFHKDFSHA256) || algorithmIdentifierHasParameters(info.KDF) {
+		return errors.New("pkcs7: unsupported or malformed KEMRecipientInfo KDF")
+	}
+	if !info.Wrap.Algorithm.Equal(OIDKeyWrapAES256) || algorithmIdentifierHasParameters(info.Wrap) || info.KEKLength != mlKEMKEKLength {
+		return errors.New("pkcs7: unsupported or malformed KEMRecipientInfo key wrap")
+	}
+	return nil
+}
+
+// decryptKEMRecipientInfo recovers the content-encryption key from a single
+// KEMRecipientInfo.
+func decryptKEMRecipientInfo(info kemRecipientInfo, expectedKEM asn1.ObjectIdentifier, decapsulate func([]byte) ([]byte, error)) ([]byte, error) {
+	if err := checkKEMRecipientInfo(info); err != nil {
+		return nil, err
+	}
+	if !info.KEM.Algorithm.Equal(expectedKEM) {
+		return nil, errors.New("pkcs7: KEMRecipientInfo algorithm does not match private key")
+	}
+
+	sharedSecret, err := decapsulate(info.Ciphertext)
+	if err != nil {
+		return nil, fmt.Errorf("pkcs7: ML-KEM decapsulation failed: %w", err)
+	}
+	kek, err := deriveKEMKey(sharedSecret, info.Wrap, info.KEKLength, info.UKM)
+	clear(sharedSecret)
+	if err != nil {
+		return nil, err
+	}
+	contentKey, err := aesKeyUnwrap(kek, info.EncryptedKey)
+	clear(kek)
+	if err != nil {
+		return nil, err
+	}
+	return contentKey, nil
 }
 
 func mlKEMDecapsulator(privateKey any) (asn1.ObjectIdentifier, func([]byte) ([]byte, error), bool) {

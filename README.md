@@ -11,6 +11,25 @@ The module requires Go 1.27 or later.
 import "github.com/digitorus/pkcs7"
 ```
 
+## Inspecting EnvelopedData Recipients
+
+A service holding several certificates can inspect an EnvelopedData before
+choosing which recipient to decrypt. `Recipients` lists each recipient's
+type, issuer/serial number or subject key identifier, and key-encryption
+algorithm, along with whether this library can decrypt it, without touching
+any private key or plaintext. `DecryptRecipient` then decrypts for a single
+recipient selected by its stable index or by an identifier from the listing.
+Identifier selectors must match exactly one recipient; when several
+recipients share an identifier, select by index instead. Only the selected
+recipient is attempted, and unsupported recipients can be listed but not
+decrypted.
+
+```go
+p7, err := pkcs7.Parse(der)
+recipients, err := p7.Recipients()
+plaintext, err := p7.DecryptRecipient(privateKey, pkcs7.SelectRecipientIndex(recipients[0].Index))
+```
+
 ## Post-Quantum Cryptography (PQC)
 
 CMS SignedData supports ML-DSA-44, ML-DSA-65, and ML-DSA-87 using Go's
