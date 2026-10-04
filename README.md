@@ -51,6 +51,23 @@ SLH-DSA is standardized for CMS by
 because Go's standard library does not currently provide an SLH-DSA
 implementation.
 
+## Strict Structural Policy
+
+Receivers can reject self-contradictory CMS structures before any
+cryptographic verification runs. `CheckStructure` validates that SignerInfo
+digest algorithms appear in the SignedData digestAlgorithms set, that
+algorithm identifier parameters are well-formed for each supported algorithm
+(absent or NULL; arbitrary DER is not treated as NULL), that hash-binding
+signature algorithms match the declared digest, and that the single-valued
+contentType and messageDigest signed attributes appear exactly once with
+exactly one value, with contentType matching the encapsulated content type.
+Signatures without signedAttrs are checked through their own legal path
+(id-data content only), and unknown unsigned attributes are preserved
+losslessly. Violations are reported as `*StructureError` carrying the signer
+index and the attribute or algorithm OID. `VerifyStrict` and
+`VerifyWithChainStrict` combine the structural policy with signature
+verification; the default `Verify` entry points are unchanged.
+
 Future work includes ML-KEM-512 when an appropriate Go implementation is
 available, CMS `AuthEnvelopedData`, CMS signed-attribute and EUF-CMA hardening,
 CMSAlgorithmProtection, SLH-DSA when an appropriate Go implementation is
