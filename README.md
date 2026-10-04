@@ -125,7 +125,40 @@ func SignAndDetach(content []byte, cert *x509.Certificate, privkey *rsa.PrivateK
 }
 ```
 
+## Countersignatures
 
+CMS countersignatures ([RFC 5652 section 11.4](https://www.rfc-editor.org/rfc/rfc5652.html#section-11.4))
+let a second signer confirm an existing `SignerInfo`. The countersigner
+digests and signs the original signer's `signatureValue` (not the
+encapsulated content), and the resulting `SignerInfo` is stored in an
+`id-countersignature` (`1.2.840.113549.1.9.6`) unsigned attribute. Adding a
+countersignature never changes the original signed attributes or signature.
+
+```go
+toBeSigned, err := pkcs7.NewSignedData(content)
+// ... add the primary signer with AddSigner ...
+
+// Target the primary SignerInfo by its index in SignerInfos.
+err = toBeSigned.AddCountersigner(0, countersignerCert, countersignerKey, pkcs7.CountersignerConfig{})
+signed, err := toBeSigned.Finish()
+
+p7, err := pkcs7.Parse(signed)
+reports, err := p7.VerifySignatures(x509.VerifyOptions{Roots: truststore})
+if err := pkcs7.ReportsError(reports); err != nil {
+	// reports[i].OriginalError and reports[i].Countersignatures[j].Error
+	// report each layer independently.
+}
+```
+
+`VerifySignatures` reports the original signature and every countersignature
+separately. Verification checks the countersigned `messageDigest` over the
+target `signatureValue`, rejects the forbidden `contentType` authenticated
+attribute, and validates the countersigner certificate. Multiple
+countersignatures on the same `SignerInfo` are reported independently.
+Nested countersignatures (countersigning a countersignature) are not
+supported: the unprocessed nested attribute is returned and
+`ErrNestedCountersignature` is reported. No timestamp authority or
+certificate service is contacted.
 
 ## Credits
 This is a fork of [fullsailor/pkcs7](https://github.com/fullsailor/pkcs7)

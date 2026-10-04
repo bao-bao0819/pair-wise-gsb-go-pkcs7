@@ -49,6 +49,9 @@ var (
 	OIDAttributeContentType   = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 9, 3}
 	OIDAttributeMessageDigest = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 9, 4}
 	OIDAttributeSigningTime   = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 9, 5}
+	// OIDAttributeCountersignature is the countersignature unsigned
+	// attribute defined in RFC 5652 section 11.4.
+	OIDAttributeCountersignature = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 9, 6}
 
 	// Digest Algorithms
 	OIDDigestAlgorithmSHA1   = asn1.ObjectIdentifier{1, 3, 14, 3, 2, 26}
