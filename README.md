@@ -57,6 +57,44 @@ CMSAlgorithmProtection, SLH-DSA when an appropriate Go implementation is
 available, and composite ML-DSA or ML-KEM only after the relevant IETF
 specifications stabilize.
 
+## Countersignatures
+
+CMS countersignatures ([RFC 5652 section 11.4](https://www.rfc-editor.org/rfc/rfc5652.html#section-11.4))
+let a second signer confirm an existing `SignerInfo`. Parse the signed
+message, select the target `SignerInfo` by index, and call
+`AddCountersignature` or `AddCountersignatureChain`; re-serialize with
+`Marshal`:
+
+```go
+p7, err := pkcs7.Parse(signedData)
+if err != nil {
+    log.Fatal(err)
+}
+err = p7.AddCountersignature(0, counterCert, counterKey, pkcs7.SignerInfoConfig{})
+if err != nil {
+    log.Fatal(err)
+}
+countersigned, err := p7.Marshal()
+```
+
+Per RFC 5652, the countersignature signs the target signer's
+`signatureValue` (via the `messageDigest` authenticated attribute), not the
+encapsulated content. It is stored in the target's unsigned attributes under
+OID `1.2.840.113549.1.9.6`, so adding one never changes the original signed
+attributes or signature. A `contentType` authenticated attribute is
+forbidden in countersignatures and rejected on both creation and
+verification.
+
+`VerifyLayers` / `VerifyLayersWithChain` / `VerifyLayersWithOpts` verify the
+original signatures and every countersignature independently. Each
+countersignature is reported separately, so tampering with the content, the
+original `signatureValue`, or a countersignature yields distinct failure
+reasons. The existing `Verify` family is unchanged and validates original
+signatures only. Nested countersignatures (countersigning a
+countersignature) are not supported: such entries are returned with
+`ErrUnsupportedRecursiveCountersignature`, and the raw values remain
+available through `RawCountersignatures`.
+
 ## Interoperability
 
 CI exercises CMS in both directions with OpenSSL 3.6 and 4.0 and Bouncy Castle
