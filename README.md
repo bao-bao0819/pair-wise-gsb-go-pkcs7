@@ -11,6 +11,24 @@ The module requires Go 1.27 or later.
 import "github.com/digitorus/pkcs7"
 ```
 
+## Strict Structural Policy
+
+The default `Verify`/`VerifyWithChain`/`VerifyWithOpts` entry points keep
+their historical, compatibility-oriented acceptance scope. Receivers that
+want self-contradictory CMS structures rejected before any cryptographic
+verification can opt into the strict structural policy via `CheckStructure`
+or the `VerifyStrict`/`VerifyWithChainStrict`/`VerifyWithOptsStrict` entry
+points. The policy cross-checks the SignedData digestAlgorithms set against
+each SignerInfo, validates algorithm identifier parameters per supported
+algorithm (absent or NULL where allowed, never arbitrary DER), and enforces
+single-valued signed attributes: `contentType` must match the signed content
+type, `messageDigest` must match the digest algorithm output size, and
+neither may be duplicated or hold the wrong number of values. Problems are
+reported as `*StructuralError` carrying the signer index and the attribute
+or algorithm OID. Signers without signed attributes are checked through
+their legitimate direct-signature path, unknown unsigned attributes are
+preserved, and the ordering of attributes inside a SET OF is irrelevant.
+
 ## Post-Quantum Cryptography (PQC)
 
 CMS SignedData supports ML-DSA-44, ML-DSA-65, and ML-DSA-87 using Go's
